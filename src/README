@@ -1,0 +1,57 @@
+The code can be run via the make file (instructions pending)
+
+A brief outline of my code structure:
+    Frame.java: Outlines frame structure and various supported methods, including translating to and from byte arrays,
+                  and reading in frames from an inputStream.
+
+    FrameLostException.java:
+                Throwable exception in case a Frame.java static method detects data loss.
+
+    Main.java:  Main class. Based on command line argument, generates n data files, 1 switch server, and n nodes.
+                Waits on each runnable object to finish before finishing itself.
+                Note: main does *not* do cleanup; each object performs necessary cleanup on itself and owned threads
+                Note: You can enable debugInfo flags in main to see status updates from each thread.
+                      By default, debugIngo is disabled; you will see no updates unless you do this.
+
+    Node.java:  Object definition for Node. Parses messages from data file and generates output file on instantiation.
+                1) Sends and receives messages from paired NodeThread (Switch), writing incoming messages to output file.
+                2) Ignores messages with destination IDs that do not match Node ID.
+                3) Informs NodeThread when finished sending data.
+                4) Runs cleanup and terminates upon signal from NodeThread (Switch).
+
+    NodeThread.java:
+                Object definition for NodeThread.  Acts as intermediary communication thread between Switch and a Node.
+                1) Establishes secondary serverSocket on local convenient port, negotiates new connection with paired Node
+                2) Receives data from paired Node and passes along to Switch for handling
+                3) Receives data from Switch and sends to paired node
+                4) Notifies Switch when unidentified client sends first message: switch will add client to switch table,
+                     and NodeThread will mark paired client as identified.
+                5) Notifies Switch when paired Node is finished sending data (determined via control message), then marks
+                     self as finished sending data.
+                6) When instructed to finish by Switch, notifies Node to finish, then performs cleanup on self.
+
+    Switch.java:
+                Object definition for Switch.  Contains 2 threads, as before:
+                1) Accept new clients on main server port, spawn NodeThread to handle communication.
+                2) Manages incoming messages and passes to NodeThread based on logical port from switch table, or if
+                     destination is unidentified, floods message to all NodeThreads.
+                   Waits for all NodeThreads to finish sending data, then performs cleanup (forcefully exits other threads,
+                     instructs all NodeThreads to finish)
+
+Checklist:
+Project Compiles and Builds without warnings or errors        Complete
+Switch class                                                  Complete
+Switch has a frame buffer, and reads/writes appropriately     Complete
+Switch allows multiple connections                            Complete
+Switch floods frame when it doesn't know the destination      Complete
+Switch learns destinations, and doesn't forward packet        Complete
+  to any port except the one required
+Switch acts like a hub                                        Complete
+Node class                                                    Complete
+Nodes instantiate, and open connection to the switch          Complete
+Nodes open their input files, and send data to switch         Complete
+Nodes open their output files, and save data                  Complete
+  that they received
+
+Known bugs:
+    None that I know of
