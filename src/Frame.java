@@ -79,7 +79,7 @@ public class Frame {
     public int getAck(){return this.ack;}
     public String getData(){return this.data;}
     public byte getCrc(){return this.crc;}
-    public int setSN(){return this.sequence;}
+    public int getSN(){return this.sequence;}
 
     //calculate expected crc byte value for a given frame
     public byte calcCrc(){

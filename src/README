@@ -1,3 +1,23 @@
+Frame Scheme:
+    Slightly expanded upon from prior work, with extra fields added in addition to request to make control smoother.
+    Format: [SourceNetwork][SourceNode][DestNetwork][DestNode][SequenceNumber][CRC][Size][Ack/Data]
+
+    Network and node ID are treated separately for smoother parsing, and as a side note technically allows more of each
+    Each node adds a sequence number to its frames so that data can be tracked.
+        This prevents issues arising from potential duplicate frames, as well as explicit acks for each received frame.
+    As requested, only one of ack or data will be present in the actual data.  In the object itself, the proper field
+      will be present, and the other field will be filled with dummy data for the container. This only gives the illusion
+      that both ack and data are present in each frame, they are actually not.
+
+
+Acknowledgement Scheme:
+    Stored and treated internally as an integer, but like all frame data is sent as byte. Codes are as follows:
+    2 (10) : CRC error -- resend frame
+    3 (11) : Message received
+    5 (101): Source object has no more messages to send
+
+
+
 The code can be run via the make file (instructions pending)
 
 A brief outline of my code structure:
