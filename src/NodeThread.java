@@ -49,7 +49,7 @@ public class NodeThread extends Thread{
         out = new BufferedOutputStream(this.init.getOutputStream(), 257);
         in = new DataInputStream(new BufferedInputStream(this.init.getInputStream()));
         //send port
-        out.write(new Frame(0, 0, String.valueOf(port)).encode());
+        out.write(new Frame(0, 0, 0, 0, 0, String.valueOf(port)).encode());
         out.flush();
         //get ack
         boolean acknowledged = false;
@@ -79,8 +79,8 @@ public class NodeThread extends Thread{
      */
     private void exit() throws IOException{
         //assumes streams are not closed
-        //send port
-        out.write(new Frame(0, 0, "fin").encode());
+        //send control
+        out.write(new Frame(0, 0, 0, 0, 0, "fin").encode());
         out.flush();
         //get ack
         boolean acknowledged = false;
@@ -88,9 +88,10 @@ public class NodeThread extends Thread{
             boolean hasContent= true;
             while(hasContent){
                 try{
-                    //ack frame with dummy address 0, really this doesn't matter, we just need any message
+                    //ack frame. what it is this doesn't really matter, we just need any message
                     byte[] raw = in.readAllBytes();
-                    //that said, I still check that it has a size, because why not
+                    //that said, I still check that *some* data was received.
+                    //even if the data is corrupt or something, that doesn't matter, literally just a response is enough
                     if(raw.length > 0){
                         acknowledged = true;
                         break;
@@ -164,18 +165,22 @@ public class NodeThread extends Thread{
                         /*Yes it has to be done here and not in Switch, because of limitations of the language and
                           because I again have to actively fight against the language to implement this requirement*/
                         if(!identified){
+                            //add table entry
                             server.addEntry(ID, msg.getSource());
                             identified = true;
                             if(debugInfo) System.out.println("NodeThread " + ID + ": connected client identified");
                         }
                         //check for control message
-                        if(msg.getDest() == 0){
+                        if(msg.getDest()[1] == 0){
                             //the only implemented control message is "fin" so no need to check for others
                             //node is done sending data, so we no longer need to do this loop
                             this.finished = true;
                             //inform switch
                             if(debugInfo) System.out.println("NodeThread " + ID + ": control message identified");
                             server.checkFinished();
+                            //ack
+                            out.write(new Frame(0, 0, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
+                            out.flush();
                         }
                         //not control, so it's an actual data message
                         else {

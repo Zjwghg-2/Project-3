@@ -5,10 +5,15 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 
+/**
+ * First-level switch object class
+ * @todo Adjust clients arraylist usage to reflect networkID field addition
+ */
+
 public class Switch implements Runnable{
     private final int port;
     private final ArrayList<NodeThread> clients;
-    //Format: {node ID, index for clients arraylist}.
+    //Format: {network ID, node ID, index for clients arraylist}.
     //In my case, "ports" are logical (arraylist index), not physical, due to Java's native socket implementation.
     private final ArrayList<Integer[]> switchTable;
     //a buffer message queue, because I have no reason to make this a static size data field.  If I am required to
@@ -54,7 +59,7 @@ public class Switch implements Runnable{
      * @param ID communication thread identifier
      * @param key client identifier
      */
-    public void addEntry(int ID, int key){
+    public void addEntry(int ID, int[] key){
         int j = -1;
         synchronized (clients){
             //find client's """port""" (logical port in this case, since java's implementation doesn't work that way)
@@ -69,7 +74,7 @@ public class Switch implements Runnable{
         if(j==-1) return;
         //add entry to switch table
         synchronized (switchTable){
-            switchTable.add(new Integer[]{key,j});
+            switchTable.add(new Integer[]{key[0], key[1], j});
         }
     }
 

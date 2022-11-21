@@ -60,7 +60,7 @@ public class Node extends Thread {
                 SN++;
             }
             //add in completion control message
-            outgoing.add(new Frame(netID, ID, netID, 0,  SN, 5));
+            outgoing.add(new Frame(netID, ID, 0, 0,  SN, 5));
             scanner.close();
             if(debugInfo) System.out.println("Node " + this.netID + ":" + this.ID + ": data successfully loaded: " + outgoing);
         } catch(FileNotFoundException e){
@@ -205,13 +205,15 @@ public class Node extends Thread {
                         //this will decode one frame's worth of data and throw exceptions where needed
                         Frame msg = Frame.decodeFromChannel(in);
                         //check for control message
-                        if(msg.getSource()[2] == 0){
-                            //only control message to be sent is ack 5 so no need to check what it is
-                            //ack back to switch
-                            out.write(new Frame(netID, ID, netID, 0, msg.getSN(), 3).encode());
-                            out.flush();
-                            //node can finish execution
-                            break;
+                        if(msg.getSource()[1] == 0){
+                            //check for ack 5 (switch object is finished, ie, network as a whole is finished)
+                            if(msg.getAck() == 5){
+                                //ack back to switch
+                                out.write(new Frame(netID, ID, netID, 0, msg.getSN(), 3).encode());
+                                out.flush();
+                                //node can finish execution
+                                break;
+                            }
                         }
                         //check if message is actually for this node
                         if(msg.getDest()[0] == netID && msg.getDest()[1] == ID){
