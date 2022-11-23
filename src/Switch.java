@@ -7,11 +7,10 @@ import java.util.LinkedList;
 
 /**
  * First-level switch object class
- * @todo Adjust clients arraylist usage to reflect networkID field addition
  */
 
-public class Switch implements Runnable{
-    private final int port;
+public class Switch extends Thread{
+    private final int port, netID;
     private final ArrayList<NodeThread> clients;
     //Format: {network ID, node ID, index for clients arraylist}.
     //In my case, "ports" are logical (arraylist index), not physical, due to Java's native socket implementation.
@@ -24,8 +23,15 @@ public class Switch implements Runnable{
     private volatile boolean finished;
     private final boolean debugInfo;
 
-    public Switch(int port, boolean debugInfo){
+    /**
+     * Switch constructor
+     * @param port Local listen port (communication port is dynamic per connection)
+     * @param netID Network ID corresponding to this switch
+     * @param debugInfo enable debug information
+     */
+    public Switch(int port, int netID, boolean debugInfo){
         this.debugInfo = debugInfo;
+        this.netID = netID;
         this.port = port;
         this.clients = new ArrayList<>();
         this.buffer = new LinkedList<>();
@@ -59,7 +65,7 @@ public class Switch implements Runnable{
      * @param ID communication thread identifier
      * @param key client identifier
      */
-    public void addEntry(int ID, int[] key){
+    public void addEntry(int ID, int key){
         int j = -1;
         synchronized (clients){
             //find client's """port""" (logical port in this case, since java's implementation doesn't work that way)
@@ -74,7 +80,7 @@ public class Switch implements Runnable{
         if(j==-1) return;
         //add entry to switch table
         synchronized (switchTable){
-            switchTable.add(new Integer[]{key[0], key[1], j});
+            switchTable.add(new Integer[]{key, j});
         }
     }
 
@@ -168,7 +174,7 @@ public class Switch implements Runnable{
                 synchronized (switchTable){
                     for(Integer[] entry : switchTable){
                         //look for destination in table
-                        if(message.getDest() == entry[0]){
+                        if(message.getDest()[1] == entry[0]){
                             //pass along the message
                             if(debugInfo) System.out.println("Server: message passed to communication thread");
                             clients.get(entry[1]).newMessage(message);
@@ -176,7 +182,7 @@ public class Switch implements Runnable{
                             break;
                         }
                         //this is for next block for flooding purposes; it isn't used if dest is present in the table
-                        if(message.getSource() == entry[0]) key = entry[1];
+                        if(message.getSource()[1] == entry[0]) key = entry[1];
                     }
                 }
                 if(found) continue;

@@ -165,8 +165,8 @@ public class NodeThread extends Thread{
                         /*Yes it has to be done here and not in Switch, because of limitations of the language and
                           because I again have to actively fight against the language to implement this requirement*/
                         if(!identified){
-                            //add table entry
-                            server.addEntry(ID, msg.getSource());
+                            //add table entry (pass local node ID, not the network ID; the switch knows its own netID)
+                            server.addEntry(ID, msg.getSource()[1]);
                             identified = true;
                             if(debugInfo) System.out.println("NodeThread " + ID + ": connected client identified");
                         }
