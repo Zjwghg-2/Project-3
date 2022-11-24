@@ -12,8 +12,10 @@ Frame Scheme:
 
 Acknowledgement Scheme:
     Stored and treated internally as an integer, but like all frame data is sent as byte. Codes are as follows:
+    1 (1)  : Firewall messages finished, continue standard initialization
     2 (10) : CRC error -- resend frame
     3 (11) : Message received
+    4 (100): NACK -- Message firewalled, do not retransmit.
     5 (101): Source object has no more messages to send
 
 

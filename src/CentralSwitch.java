@@ -1,23 +1,22 @@
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.Scanner;
 
 /**
- * First-level switch object class
+ * Global level switch thread
  */
-public class Switch extends Thread{
-    private final int port, netID, masterPort;
-    private Socket master;
+public class CentralSwitch extends Thread{
+    private final int port;
+    private final ArrayList<SwitchThread> clients;
+    //each entry in the list is a firewalled network ID
     private final ArrayList<Integer> firewall;
-    private final ArrayList<NodeThread> clients;
-    //Format: {node ID, index for clients arraylist}.
+    //Format: {network ID, index for clients arraylist}.
     //In my case, "ports" are logical (arraylist index), not physical, due to Java's native socket implementation.
     private final ArrayList<Integer[]> switchTable;
     //a buffer message queue, because I have no reason to make this a static size data field.  If I am required to
@@ -27,27 +26,42 @@ public class Switch extends Thread{
     private final LinkedList<Frame> buffer;
     private volatile boolean finished;
     private final boolean debugInfo;
-    //communicate to master
-    private BufferedOutputStream out;
-    private DataInputStream in;
 
     /**
      * Switch constructor
      * @param port Local listen port (communication port is dynamic per connection)
-     * @param netID Network ID corresponding to this switch
-     * @param masterPort central switch port number
      * @param debugInfo enable debug information
      */
-    public Switch(int port, int netID, int masterPort, boolean debugInfo){
+    public CentralSwitch(int port, boolean debugInfo){
         this.debugInfo = debugInfo;
-        this.netID = netID;
         this.port = port;
-        this.master = null;
         this.firewall = new ArrayList<>();
-        this.masterPort = masterPort;
         this.clients = new ArrayList<>();
         this.buffer = new LinkedList<>();
         this.switchTable = new ArrayList<>();
+        //Initialize data from file
+        try{
+            //Set scanner to read config file
+            Scanner scanner = new Scanner(new File("firewall.txt"));
+            while (scanner.hasNextLine()){
+                //get data line
+                String s = scanner.nextLine();
+                //pull out node info
+                String[] d = s.split(":")[0].split("_");
+                int n = Integer.parseInt(d[0]);
+                //if global firewall rule, add it to the field
+                if(d[1].equals("#")) firewall.add(n);
+                //if local firewall rule (ie, specific node), add a control frame to the buffer queue
+                else buffer.add(new Frame(-1, -1, n, 0, 0, d[1]));
+            }
+            //control messages of this sort are by definition flooded to all switches.
+            buffer.add(new Frame(-1, -1, 0, 0, 0, 1));
+            scanner.close();
+            if(debugInfo) System.out.println("Master: firewall successfully loaded.");
+        } catch(FileNotFoundException e){
+            System.out.println("Master: An error occurred loading input file: FileNotFoundException\n");
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -103,13 +117,13 @@ public class Switch extends Thread{
     public void checkFinished() {
         try {
             //check 1
-            for(NodeThread thread: this.clients){
+            for(SwitchThread thread: this.clients){
                 if(!thread.finished()) return;
             }
             //sleep for 1 second
             Thread.sleep(1000);
             //check again
-            for(NodeThread thread: this.clients){
+            for(SwitchThread thread: this.clients){
                 if(!thread.finished()) return;
             }
             //reasonably certain that all nodes that will connect have connected and have finished.
@@ -122,66 +136,10 @@ public class Switch extends Thread{
 
     @Override
     public void run() {
-        //connect to master and retrieve firewall rules
-        try {
-            //check if the port exists
-            if(masterPort == -1) {
-                System.out.println("Server: Couldn't find port to connect");
-                return;
-            }
-            //connect until it works
-            boolean flag = true;
-            do{
-                try {
-                    master = new Socket("localhost", port);
-                    flag = false;
-                } catch (ConnectException e) {
-                    if(debugInfo) System.out.println("Server: Connection failed, retrying...");
-                }
-            } while(flag);
-            if(debugInfo) System.out.println("Server: master socket connected");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        //set up streams and read messages
-        try {
-            in = new DataInputStream(new BufferedInputStream(master.getInputStream()));
-            out = new BufferedOutputStream(master.getOutputStream());
-            boolean flag = true;
-            //read
-            while(flag){
-                while(in.available()>0){
-                    try{
-                        //this will decode one frame's worth of data and throw exceptions where needed
-                        Frame msg = Frame.decodeFromChannel(in);
-                        //check for completion ack
-                        if(msg.getDest()[0] == 0){
-                            //this runs for ack 1 control message, flooded to all nodes using destination network = 0
-                            flag = false;
-                            if(debugInfo) System.out.println("Server: Ack 1 received. Setting up node connections.");
-                        }
-                        //not control, so it's firewall info
-                        else {
-                            if(debugInfo) System.out.println("Server: local firewall information received");
-                            //add to firewall
-                            firewall.add(Integer.parseInt(msg.getData()));
-                        }
-                    } catch (FrameLostException e){
-                        //Frame was lost; print this to terminal and send no ack
-                        System.out.println("Server: frame error detected at firewall setup");
-                    }
-                }
-            }
-        } catch (IOException e){
-            System.out.println("Server: Unknown IO exception occurred in firewall setup");
-            e.printStackTrace();
-        }
-
-        //switch performance
         //as in project 1, this class contains 2 threads
 
         //This is necessary for thread 1, as it is an abstract thread object, but still needs switch reference
-        Switch self = this;
+        CentralSwitch self = this;
         //Thread 1: accepts incoming connections, creates NodeThreads to handle communication.
         //this is an abstract class, as I have to override interrupt as well as run to terminate it on cleanup.
         Thread acceptor = new Thread(){
@@ -195,18 +153,18 @@ public class Switch extends Thread{
                     while (!finished) {
                         //wait for client connection
                         Socket client = serverSocket.accept();
-                        if(debugInfo) System.out.println("Server: New client connected");
-                        NodeThread nodeThread = new NodeThread(self, client, debugInfo);
-                        nodeThread.start();
+                        if(debugInfo) System.out.println("Master: New client connected");
+                        SwitchThread switchThread = new SwitchThread(self, client, debugInfo);
+                        switchThread.start();
                         //add to instance field list
                         synchronized (clients){
-                            clients.add(nodeThread);
+                            clients.add(switchThread);
                         }
                     }
                 } catch (SocketException e){
-                    if(debugInfo) System.out.println("Server: acceptor thread forced close");
+                    if(debugInfo) System.out.println("Master: acceptor thread forced close");
                 } catch (IOException e) {
-                    System.out.println("Server: unknown IOException encountered");
+                    System.out.println("Master: unknown IOException encountered");
                     e.printStackTrace();
                 }
             }
@@ -217,7 +175,7 @@ public class Switch extends Thread{
                 try{
                     serverSocket.close();
                 } catch (IOException e){
-                    if(debugInfo) System.out.println("Server: acceptor thread forced close");
+                    if(debugInfo) System.out.println("Master: acceptor thread forced close");
                 }
             }
         };
@@ -230,55 +188,42 @@ public class Switch extends Thread{
                     Thread.yield();
                     continue;
                 }
-                if(debugInfo) System.out.println("Server: message found in buffer");
+                if(debugInfo) System.out.println("Master: message found in buffer");
                 Frame message = dequeueMessage();
-                //Note that the NodeThread automatically informs Switch of unidentified clients (see addEntry)
+                //Note that the SwitchThread automatically informs Switch of unidentified clients (see addEntry)
                 //The switch object therefore adds entries to the switching table in that method automatically
                 //That is why adding entries to the switch table is not handled in this block
 
-                //check for flooding; if not intended network, ignore it
-                if(message.getDest()[0] != netID) continue;
                 //check for firewall; if local node is firewalled, nack
-                boolean flag = false;
                 for(int i: firewall){
-                    if(message.getDest()[1] == i){
-                        //firewall found; send nack to out, then move on
-                        try{
-                            flag = true;
-                            out.write(new Frame(netID, message.getDest()[1], message.getSource()[0], message.getSource()[1],
-                                    message.getSN(), 4).encode());
-                            out.flush();
-                            break;
-                        } catch (IOException e){
-                            System.out.println("Server: Unknown IO error encountered");
-                            e.printStackTrace();
-                        }
+                    if(message.getDest()[0] == i){
+                        //firewall found; replace the incoming message with a nack back to the source
+                        message = new Frame(i, message.getDest()[1], message.getSource()[0], message.getSource()[1],
+                                message.getSN(), 4);
+                        break;
                     }
                 }
-                //check if nack was sent. if so, do not pass along message. otherwise, move on
-                if(flag) continue;
 
-                //Message is both for this network and is not firewalled.
                 //check switch table for sending area
                 boolean found = false;
                 int key = -1;
                 synchronized (switchTable){
                     for(Integer[] entry : switchTable){
                         //look for destination in table
-                        if(message.getDest()[1] == entry[0]){
+                        if(message.getDest()[0] == entry[0]){
                             //pass along the message
-                            if(debugInfo) System.out.println("Server: message passed to communication thread");
+                            if(debugInfo) System.out.println("Master: message passed to communication thread");
                             clients.get(entry[1]).newMessage(message);
                             found = true;
                             break;
                         }
                         //this is for next block for flooding purposes; it isn't used if dest is present in the table
-                        if(message.getSource()[1] == entry[0]) key = entry[1];
+                        if(message.getSource()[0] == entry[0]) key = entry[1];
                     }
                 }
                 if(found) continue;
                 //this block will only be reached if the target not found in switch table, so here we flood
-                if(debugInfo) System.out.println("Server: message will be flooded");
+                if(debugInfo) System.out.println("Master: message will be flooded");
                 synchronized (clients){
                     for(int i = 0; i < clients.size(); i++){
                         if(i == key) continue;
@@ -287,9 +232,9 @@ public class Switch extends Thread{
                 }
             }
             //manager thread is done, which means all data is finished sending.  start cleanup.
-            if(debugInfo) System.out.println("Server: communication threads completed, starting cleanup");
+            if(debugInfo) System.out.println("Master: communication threads completed, starting cleanup");
             //cleanup: tell all communication threads to finish and close.
-            for(NodeThread t: clients){
+            for(SwitchThread t: clients){
                 t.interrupt();
             }
             //cleanup: force acceptor to close
@@ -297,6 +242,14 @@ public class Switch extends Thread{
         });
         //start threads. they will exit automatically when every node informs the server it is finished
         acceptor.start();
+        //give time for acceptors to connect
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            System.out.println("Master: Unknown interruption encountered at startup");
+            throw new RuntimeException(e);
+        }
+        //start manager
         manager.start();
     }
 }

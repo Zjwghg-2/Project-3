@@ -104,6 +104,7 @@ public class Main {
         }*/
         //Variable controls
         int port = 1234;
+        int masterPort = 4321;
         boolean nodeDebugInfo = true;
         boolean serverDebugInfo = true;
         /*get number of nodes
@@ -123,7 +124,7 @@ public class Main {
         //make switches
         Switch[] switches = new Switch[maxSwitch];
         for(int i = 0; i < maxSwitch; i++){
-            switches[i] = new Switch(port+i, i+1, serverDebugInfo);
+            switches[i] = new Switch(port+i, i+1, masterPort, serverDebugInfo);
         }
         //make nodes
         Node[] nodes = new Node[maxNode];
