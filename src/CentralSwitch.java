@@ -62,6 +62,7 @@ public class CentralSwitch extends Thread{
             System.out.println("Master: An error occurred loading input file: FileNotFoundException\n");
             e.printStackTrace();
         }
+        if(debugInfo) System.out.println("Master: firewall " + firewall);
     }
 
     /**
@@ -148,6 +149,7 @@ public class CentralSwitch extends Thread{
             public void run() {
                 //set up server socket
                 try {
+                    if(debugInfo) System.out.println("Master: creating server on port " + port);
                     serverSocket = new ServerSocket(port);
                     //deadloop -- listen for client connection and handle it
                     while (!finished) {
@@ -197,7 +199,11 @@ public class CentralSwitch extends Thread{
                 //check for firewall; if local node is firewalled, nack
                 for(int i: firewall){
                     if(message.getDest()[0] == i){
-                        //firewall found; replace the incoming message with a nack back to the source
+                        //firewall found
+                        //acks need to pass through the firewall
+                        if(message.getSize() == 0) break;
+                        //not an ack message, so replace it with a nack back to the source.
+                        if(debugInfo) System.out.println("Master: message firewalled. bouncing nack." + message);
                         message = new Frame(i, message.getDest()[1], message.getSource()[0], message.getSource()[1],
                                 message.getSN(), 4);
                         break;

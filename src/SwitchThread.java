@@ -44,7 +44,7 @@ public class SwitchThread extends Thread{
     private void exit() throws IOException{
         //assumes streams are not closed
         //send control
-        out.write(new Frame(0, 0, 0, 0, 0, "fin").encode());
+        out.write(new Frame(0, 0, 0, 0, 0, 6).encode());
         out.flush();
         //get ack
         boolean acknowledged = false;
@@ -73,11 +73,14 @@ public class SwitchThread extends Thread{
      * @param message message
      */
     public void newMessage(Frame message){
-        if(!initialized) Thread.onSpinWait();
+        if(!this.initialized) Thread.onSpinWait();
+        if(this.out == null) Thread.onSpinWait();
         try{
-            if(debugInfo) System.out.println("SwitchThread " + ID + ": incoming message identified: " + message);
-            out.write(message.encode());
-            out.flush();
+            if(debugInfo) System.out.println("SwitchThread " + ID + ": sending: " + message);
+            synchronized (this.out){
+                out.write(message.encode());
+                out.flush();
+            }
         } catch (SocketException e) {
             System.out.println("Error: SwitchThread " + ID + ": could not send message to client: likely socket closed.");
             e.printStackTrace();
@@ -127,9 +130,6 @@ public class SwitchThread extends Thread{
                             //inform switch
                             if(debugInfo) System.out.println("SwitchThread " + ID + ": control message identified");
                             server.checkFinished();
-                            //ack
-                            out.write(new Frame(0, 0, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
-                            out.flush();
                         }
                         //not control, so it's an actual data message
                         else {

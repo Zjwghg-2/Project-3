@@ -17,6 +17,7 @@ Acknowledgement Scheme:
     3 (11) : Message received
     4 (100): NACK -- Message firewalled, do not retransmit.
     5 (101): Source object has no more messages to send
+    6 (110): Network is finished; terminate
 
 
 

@@ -3,11 +3,10 @@ import java.net.ConnectException;
 import java.net.Socket;
 import java.util.LinkedList;
 import java.util.Scanner;
-import java.util.concurrent.*;
 
 public class Node extends Thread {
-    private final static long PERIOD = 2000;
-    private final static int RETRY = 5;
+    private final static long PERIOD = 5000;
+    private final static int RETRY = 3;
     private final int ID, netID;
     private int port;
     private boolean finished, terminated;
@@ -143,7 +142,7 @@ public class Node extends Thread {
                     init = new Socket("localhost", port);
                     flag = false;
                 } catch (ConnectException e) {
-                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Connection failed, retrying...");
+                    //if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Connection failed, retrying...");
                 }
             }
             if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Init socket connected");
@@ -168,56 +167,22 @@ public class Node extends Thread {
 
             //Run until socket closes
             while(!server.isClosed()){
-                //check for period on a message
-                if(waitOnAck){
-                    //check for repeat. if timeout, print and move on
-                    if(repeat == RETRY){
-                        System.out.println("Node " + netID + ":" + ID + ": could not send message; timeout");
-                        waitOnAck = false;
-                    }
-                    //if time has gone beyond period threshold, add the message to the queue again
-                    else if(System.currentTimeMillis() - start >= PERIOD){
-                        outgoing.push(outMsg);
-                        repeat++;
-                    }
-                }
-                //send messages over socket from queue until all messages are sent
-                //this block will not execute unless ack has been received; only 1 message at a time is to be sent.
-                if(!outgoing.isEmpty() && !waitOnAck){
-                    outMsg = outgoing.remove();
-                    out.write(outMsg.encode());
-                    //send message
-                    out.flush();
-                    //start time
-                    start = System.currentTimeMillis();
-                    //flag
-                    waitOnAck = true;
-                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": sending message \"" + outMsg.getData() + "\"");
-                    //the final message is a control message to the switch. This node can mark itself as finished though.
-                    if(outgoing.isEmpty()) {
-                        this.finished = true;
-                    }
-                }
                 //listen for incoming messages
                 //loop here will read whenever there is data to read
                 if(in.available()>0) {
                     try{
                         //this will decode one frame's worth of data and throw exceptions where needed
                         Frame msg = Frame.decodeFromChannel(in);
-                        //check for control message
-                        if(msg.getSource()[1] == 0){
-                            //check for ack 5 (switch object is finished, ie, network as a whole is finished)
-                            if(msg.getAck() == 5){
-                                //ack back to switch
-                                out.write(new Frame(netID, ID, netID, 0, msg.getSN(), 3).encode());
-                                out.flush();
-                                //node can finish execution
-                                break;
-                            }
+                        //check for ack 6 (ie, network is finished)
+                        if(msg.getAck() == 6){
+                            //ack back to switch
+                            out.write(new Frame(netID, ID, 0, 0, 0, 3).encode());
+                            out.flush();
+                            //node can finish execution
+                            break;
                         }
                         //check if message is actually for this node
-                        if(msg.getDest()[0] == netID && msg.getDest()[1] == ID){
-                            if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received: \"" + msg.getData() + "\"");
+                        else if(msg.getDest()[0] == netID && msg.getDest()[1] == ID){
                             //check crc data viability
                             if(msg.getCrc() != msg.calcCrc()){
                                 System.out.println("Node " + netID + ":" + ID + ": received garbage frame");
@@ -226,6 +191,7 @@ public class Node extends Thread {
                             }
                             //data frame handle
                             else if(msg.getSize() > 0){
+                                if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received: \"" + msg.getData() + "\"");
                                 //send ack first
                                 out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
                                 out.flush();
@@ -237,6 +203,7 @@ public class Node extends Thread {
                             else{
                                 //message received
                                 if(msg.getAck() == 3){
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Ack received");
                                     //send message block always executes before this, and there is always at least 1 message for a node to send
                                     //thus this assert should pass, it's just important for the if statement after.
                                     assert outMsg != null;
@@ -246,7 +213,15 @@ public class Node extends Thread {
                                     //at this point: ack has been received for pending message. clear for next message.
                                     waitOnAck = false;
                                 }
-                                //some error happened, so resend the message
+                                //nack
+                                else if(msg.getAck() == 4){
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Negative ack received");
+                                    //same as above
+                                    assert outMsg != null;
+                                    if(outMsg.getSN() != msg.getSN()) continue;
+                                    waitOnAck = false;
+                                }
+                                //some error happened (like CRC check failure), so resend the message
                                 else outgoing.push(outMsg);
                                 //response received so set repeat back to 0
                                 repeat = 0;
@@ -255,6 +230,41 @@ public class Node extends Thread {
                     } catch (FrameLostException e){
                         //Frame was lost; print this to terminal and send no ack
                         System.out.println("Frame error detected at NodeThread ID: " + this.ID);
+                    }
+                }
+                //check for period on a message
+                if(waitOnAck){
+                    //check for repeat. if timeout, print and move on
+                    if(repeat == RETRY){
+                        System.out.println("Node " + netID + ":" + ID + ": timeout on " + outMsg);
+                        waitOnAck = false;
+                    }
+                    //if time has gone beyond period threshold, add the message to the queue again
+                    else if(System.currentTimeMillis() - start >= PERIOD){
+                        if(debugInfo) System.out.println("Node " + netID + ":" + ID + " resending message (attempt "
+                                + repeat + "): "+ outMsg);
+                        out.write(outMsg.encode());
+                        out.flush();
+                        repeat++;
+                        start = System.currentTimeMillis();
+                    }
+                }
+                //send messages over socket from queue until all messages are sent
+                //this block will not execute unless ack has been received; only 1 message at a time is to be sent.
+                if(!outgoing.isEmpty() && !waitOnAck){
+                    outMsg = outgoing.remove();
+                    out.write(outMsg.encode());
+                    //send message
+                    out.flush();
+                    //start time
+                    repeat = 0;
+                    start = System.currentTimeMillis();
+                    //flag
+                    waitOnAck = true;
+                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": sent " + outMsg);
+                    //the final message is a control message to the switch. This node can mark itself as finished though.
+                    if(outgoing.isEmpty()) {
+                        this.finished = true;
                     }
                 }
             }

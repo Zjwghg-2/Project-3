@@ -80,7 +80,7 @@ public class NodeThread extends Thread{
     private void exit() throws IOException{
         //assumes streams are not closed
         //send control
-        out.write(new Frame(0, 0, 0, 0, 0, "fin").encode());
+        out.write(new Frame(0, 0, 0, 0, 0, 6).encode());
         out.flush();
         //get ack
         boolean acknowledged = false;

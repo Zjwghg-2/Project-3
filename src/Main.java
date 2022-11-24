@@ -106,7 +106,8 @@ public class Main {
         int port = 1234;
         int masterPort = 4321;
         boolean nodeDebugInfo = true;
-        boolean serverDebugInfo = true;
+        boolean serverDebugInfo = false;
+        boolean masterDebugInfo = false;
         /*get number of nodes
         int max = Integer.parseInt(args[0]);
         if(max == 1){
@@ -114,13 +115,15 @@ public class Main {
             return;
         }*/
         //make list
-        int maxSwitch = 1;
+        int maxSwitch = 2;
         int maxNode = 5;
         ArrayList<int[]> list = makeList(maxSwitch, maxNode);
         //make files
         for(int i = 0; i < list.size(); i++){
             makeFile(i, list);
         }
+        //make master
+        CentralSwitch master = new CentralSwitch(masterPort, masterDebugInfo);
         //make switches
         Switch[] switches = new Switch[maxSwitch];
         for(int i = 0; i < maxSwitch; i++){
@@ -134,6 +137,7 @@ public class Main {
             nodes[i] = new Node(port+nnet-1, nid, nnet, nodeDebugInfo);
         }
         //start threads
+        master.start();
         for(Thread s: switches){
             s.start();
         }

@@ -212,12 +212,12 @@ public class Frame {
 
     @Override
     public String toString(){
-        if(this.size >= 0){
-            return "[" + sourceNet + ":" + sourceNode + "][" + destNet + ":" + destNode  + "][" + sequence + "][" +
-                    "][" + crc + "][" + size + "][" + data + "]";
+        if(this.size > 0){
+            return "[" + sourceNet + "][" + sourceNode + "][" + destNet + "][" + destNode  + "][" + sequence + "][" +
+                    crc + "][" + size + "][" + data + "]";
         }else{
-            return "[" + sourceNet + ":" + sourceNode + "][" + destNet + ":" + destNode  + "][" + sequence + "][" +
-                    "][" + crc + "][" + size + "][" + ack + "]";
+            return "[" + sourceNet + "][" + sourceNode + "][" + destNet + "][" + destNode  + "][" + sequence + "][" +
+                    crc + "][" + size + "][" + ack + "]";
         }
     }
 
