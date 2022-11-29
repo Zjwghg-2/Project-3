@@ -1,11 +1,13 @@
 import java.io.*;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.Random;
 import java.util.Scanner;
 
 public class Node extends Thread {
-    private final static long PERIOD = 5000;
+    private final static long PERIOD = 6000;
     private final static int RETRY = 3;
     private final int ID, netID;
     private int port;
@@ -13,6 +15,7 @@ public class Node extends Thread {
     private final boolean debugInfo;
     private final LinkedList<Frame> outgoing;
     private Socket server, init;
+    private final ArrayList<Integer[]> saved;
     BufferedOutputStream out;
     DataInputStream in;
 
@@ -27,6 +30,7 @@ public class Node extends Thread {
         this.port = port;
         this.ID = ID;
         this.netID = netID;
+        this.saved = new ArrayList<>();
         this.finished = false;
         this.terminated = false;
         this.debugInfo = debugInfo;
@@ -165,6 +169,9 @@ public class Node extends Thread {
             boolean waitOnAck = false;
             Frame outMsg = null;
 
+            //backoff
+            Random random = new Random();
+
             //Run until socket closes
             while(!server.isClosed()){
                 //listen for incoming messages
@@ -173,6 +180,7 @@ public class Node extends Thread {
                     try{
                         //this will decode one frame's worth of data and throw exceptions where needed
                         Frame msg = Frame.decodeFromChannel(in);
+                        if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Incoming message " + msg);
                         //check for ack 6 (ie, network is finished)
                         if(msg.getAck() == 6){
                             //ack back to switch
@@ -191,19 +199,40 @@ public class Node extends Thread {
                             }
                             //data frame handle
                             else if(msg.getSize() > 0){
-                                if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received: \"" + msg.getData() + "\"");
                                 //send ack first
                                 out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
                                 out.flush();
-                                //pull data and send to file
-                                fileWriter.write(msg.getSource()[0] + "_" + msg.getSource()[1] + ": " + msg.getData() + "\n");
-                                fileWriter.flush();
+                                if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received " + msg);
+                                //check saved -- this handles duplicate messages
+                                boolean f = false;
+                                boolean g = false;
+                                for(Integer[] i: saved){
+                                    if(i[0] == msg.getSource()[0] && i[1] == msg.getSource()[1]){
+                                        if(i[2] != msg.getSN()){
+                                            f = true;
+                                            i[2] = msg.getSN();
+                                        }
+                                        g = true;
+                                        break;
+                                    }
+                                }
+                                //if new node, add new entry in saved
+                                if(!g){
+                                    saved.add(new Integer[]{msg.getSource()[0], msg.getSource()[1], msg.getSN()});
+                                    f = true;
+                                }
+                                //if data is not duplicate,
+                                if(f){
+                                    //pull data and send to file
+                                    fileWriter.write(msg.getSource()[0] + "_" + msg.getSource()[1] + ": " + msg.getData() + "\n");
+                                    fileWriter.flush();
+                                }
                             }
                             //ack frame handle
                             else{
                                 //message received
                                 if(msg.getAck() == 3){
-                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Ack received");
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Ack received on " + outMsg);
                                     //send message block always executes before this, and there is always at least 1 message for a node to send
                                     //thus this assert should pass, it's just important for the if statement after.
                                     assert outMsg != null;
@@ -212,19 +241,24 @@ public class Node extends Thread {
                                     if(outMsg.getSN() != msg.getSN()) continue;
                                     //at this point: ack has been received for pending message. clear for next message.
                                     waitOnAck = false;
+                                    repeat = 0;
                                 }
                                 //nack
                                 else if(msg.getAck() == 4){
-                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Negative ack received");
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": Negative ack received on " + outMsg);
                                     //same as above
                                     assert outMsg != null;
                                     if(outMsg.getSN() != msg.getSN()) continue;
                                     waitOnAck = false;
+                                    repeat = 0;
                                 }
                                 //some error happened (like CRC check failure), so resend the message
-                                else outgoing.push(outMsg);
-                                //response received so set repeat back to 0
-                                repeat = 0;
+                                else {
+                                    out.write(outMsg.encode());
+                                    out.flush();
+                                    repeat = 0;
+                                    start = System.currentTimeMillis();
+                                }
                             }
                         }
                     } catch (FrameLostException e){
@@ -235,7 +269,7 @@ public class Node extends Thread {
                 //check for period on a message
                 if(waitOnAck){
                     //check for repeat. if timeout, print and move on
-                    if(repeat == RETRY){
+                    if(repeat == RETRY+1){
                         System.out.println("Node " + netID + ":" + ID + ": timeout on " + outMsg);
                         waitOnAck = false;
                     }
@@ -266,6 +300,8 @@ public class Node extends Thread {
                     if(outgoing.isEmpty()) {
                         this.finished = true;
                     }
+                    //backoff
+                    Thread.sleep(random.nextInt(500));
                 }
             }
             //Node has finished

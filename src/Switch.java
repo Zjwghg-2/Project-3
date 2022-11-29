@@ -119,7 +119,7 @@ public class Switch extends Thread{
             this.finished = true;
             //inform master we are finished
             synchronized (out){
-                out.write(new Frame(netID, 0, 0, 0, 0, 2).encode());
+                out.write(new Frame(netID, 0, 0, 0, 0, 5).encode());
                 out.flush();
             }
         } catch (InterruptedException e){
@@ -246,6 +246,7 @@ public class Switch extends Thread{
                 }
                 //if(debugInfo) System.out.println("Server " + netID + ": message found in buffer");
                 Frame message = dequeueMessage();
+                if(debugInfo) System.out.println("Server " + netID + ": found message (may be flooded)" + message);
                 //Note that the NodeThread automatically informs Switch of unidentified clients (see addEntry)
                 //The switch object therefore adds entries to the switching table in that method automatically
                 //That is why adding entries to the switch table is not handled in this block
@@ -305,7 +306,7 @@ public class Switch extends Thread{
                         //look for destination in table
                         if(message.getDest()[1] == entry[0]){
                             //pass along the message
-                            if(debugInfo) System.out.println("Server " + netID + ": message switched");
+                            if(debugInfo) System.out.println("Server " + netID + ": message switched " + message);
                             clients.get(entry[1]).newMessage(message);
                             found = true;
                             break;
@@ -316,7 +317,7 @@ public class Switch extends Thread{
                 }
                 if(found) continue;
                 //this block will only be reached if the target not found in switch table, so here we flood
-                if(debugInfo) System.out.println("Server " + netID + ": message will be flooded");
+                if(debugInfo) System.out.println("Server " + netID + ": message will be flooded " + message);
                 synchronized (clients){
                     for(int i = 0; i < clients.size(); i++){
                         if(i == key) continue;
@@ -342,6 +343,7 @@ public class Switch extends Thread{
                     while(in.available() > 0){
                         try{
                             Frame msg = Frame.decodeFromChannel(in);
+                            if(debugInfo) System.out.println("Switch " + netID + ": received global " + msg);
                             //check for control message
                             if(msg.getAck() == 6){
                                 if(debugInfo) System.out.println("Switch " + netID + ": fin received");
@@ -353,7 +355,7 @@ public class Switch extends Thread{
                             else if(msg.getDest()[0] != netID) continue;
                             //must be some message to the network, then
                             else {
-                               if(debugInfo) System.out.println("Switch " + netID + ": received global " + msg);
+                               //if(debugInfo) System.out.println("Switch " + netID + ": received global " + msg);
                                enqueueMessage(msg);
                             }
                         } catch (FrameLostException e){

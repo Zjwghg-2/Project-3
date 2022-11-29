@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SwitchThread extends Thread{
@@ -8,8 +9,8 @@ public class SwitchThread extends Thread{
     private final CentralSwitch server;
     private final Socket client;
     private final int ID;
-    private BufferedOutputStream out;
-    private DataInputStream in;
+    private final BufferedOutputStream out;
+    private final DataInputStream in;
     private volatile boolean identified, finished, terminated, initialized;
     private final boolean debugInfo;
     //static initializer block for atomicInt counter. This variable gives unique IDs to each SwitchThread that is created.
@@ -28,6 +29,13 @@ public class SwitchThread extends Thread{
         this.server = server;
         this.ID = counter.incrementAndGet();
         this.client = client;
+        try {
+            out = new BufferedOutputStream(client.getOutputStream(), 257);
+            in = new DataInputStream(new BufferedInputStream(client.getInputStream()));
+        } catch (IOException e) {
+            System.out.println("Fatal error in SwitchThread " + ID + ": could not set up streams");
+            throw new RuntimeException("Couldn't get stream");
+        }
     }
 
     public int getID() {
@@ -44,8 +52,10 @@ public class SwitchThread extends Thread{
     private void exit() throws IOException{
         //assumes streams are not closed
         //send control
-        out.write(new Frame(0, 0, 0, 0, 0, 6).encode());
-        out.flush();
+        synchronized (out){
+            out.write(new Frame(0, 0, 0, 0, 0, 6).encode());
+            out.flush();
+        }
         //get ack
         boolean acknowledged = false;
         while(!acknowledged){
@@ -74,10 +84,9 @@ public class SwitchThread extends Thread{
      */
     public void newMessage(Frame message){
         if(!this.initialized) Thread.onSpinWait();
-        if(this.out == null) Thread.onSpinWait();
         try{
             if(debugInfo) System.out.println("SwitchThread " + ID + ": sending: " + message);
-            synchronized (this.out){
+            synchronized (out){
                 out.write(message.encode());
                 out.flush();
             }
@@ -104,8 +113,6 @@ public class SwitchThread extends Thread{
     @Override
     public void run() {
         try {
-            out = new BufferedOutputStream(client.getOutputStream(), 257);
-            in = new DataInputStream(new BufferedInputStream(client.getInputStream()));
             if(debugInfo) System.out.println("SwitchThread " + ID + ": Connection thread successfully established");
             this.initialized = true;
             //read until the connection closes or until instructed to terminate
@@ -117,10 +124,10 @@ public class SwitchThread extends Thread{
                         Frame msg = Frame.decodeFromChannel(in);
                         //This basically does the job of """"learning"""" from incoming messages
                         if(!identified){
-                            //add table entry (pass local node ID, not the network ID; the switch knows its own netID)
-                            server.addEntry(ID, msg.getSource()[1]);
+                            //add table entry (pass network ID; the central switch's table works on the network level)
+                            server.addEntry(ID, msg.getSource()[0]);
                             identified = true;
-                            if(debugInfo) System.out.println("SwitchThread " + ID + ": connected client identified");
+                            if(debugInfo) System.out.println("SwitchThread " + ID + ": connected client identified, " + msg.getSource()[0]);
                         }
                         //check for control message
                         if(msg.getDest()[1] == 0){
@@ -128,12 +135,12 @@ public class SwitchThread extends Thread{
                             //node is done sending data, so we no longer need to do this loop
                             this.finished = true;
                             //inform switch
-                            if(debugInfo) System.out.println("SwitchThread " + ID + ": control message identified");
+                            if(debugInfo) System.out.println("SwitchThread " + ID + ": control message identified " + msg);
                             server.checkFinished();
                         }
                         //not control, so it's an actual data message
                         else {
-                            if(debugInfo) System.out.println("SwitchThread " + ID + ": outgoing message sent to switch");
+                            if(debugInfo) System.out.println("SwitchThread " + ID + ": outgoing message sent to switch " + msg);
                             //add it to the server's buffer to be switched as appropriate
                             this.server.enqueueMessage(msg);
                         }

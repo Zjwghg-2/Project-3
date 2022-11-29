@@ -190,8 +190,8 @@ public class CentralSwitch extends Thread{
                     Thread.yield();
                     continue;
                 }
-                if(debugInfo) System.out.println("Master: message found in buffer");
                 Frame message = dequeueMessage();
+                if(debugInfo) System.out.println("Master: message found in buffer " + message);
                 //Note that the SwitchThread automatically informs Switch of unidentified clients (see addEntry)
                 //The switch object therefore adds entries to the switching table in that method automatically
                 //That is why adding entries to the switch table is not handled in this block
@@ -210,7 +210,7 @@ public class CentralSwitch extends Thread{
                     }
                 }
 
-                //check switch table for sending area
+                //check switch table for sending area -- because of firewall data packets, all networks are guaranteed to be identified
                 boolean found = false;
                 int key = -1;
                 synchronized (switchTable){
@@ -218,7 +218,7 @@ public class CentralSwitch extends Thread{
                         //look for destination in table
                         if(message.getDest()[0] == entry[0]){
                             //pass along the message
-                            if(debugInfo) System.out.println("Master: message passed to communication thread");
+                            if(debugInfo) System.out.println("Master: message passed to communication thread" + message);
                             clients.get(entry[1]).newMessage(message);
                             found = true;
                             break;
@@ -229,7 +229,7 @@ public class CentralSwitch extends Thread{
                 }
                 if(found) continue;
                 //this block will only be reached if the target not found in switch table, so here we flood
-                if(debugInfo) System.out.println("Master: message will be flooded");
+                if(debugInfo) System.out.println("Master: message will be flooded " + message);
                 synchronized (clients){
                     for(int i = 0; i < clients.size(); i++){
                         if(i == key) continue;
@@ -250,7 +250,7 @@ public class CentralSwitch extends Thread{
         acceptor.start();
         //give time for acceptors to connect
         try {
-            Thread.sleep(100);
+            Thread.sleep(3000);
         } catch (InterruptedException e) {
             System.out.println("Master: Unknown interruption encountered at startup");
             throw new RuntimeException(e);

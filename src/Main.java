@@ -27,14 +27,16 @@ public class Main {
             //more packets than there are other nodes.
             int[] outs = new int[generator.nextInt(list.size()-1)+1];
             boolean flag;
+            //iterate for each output
             for(int i = 0; i < outs.length; i++){
+                //do this until valid
                 flag = true;
                 while(flag){
                     //output node range is [1,size] -- this is fine since the number will re-roll if sending to itself.
                     //outs is an array of indexes into list
                     outs[i] = generator.nextInt(list.size());
                     //ensure node won't send data to itself
-                    if(i == outs[i]) continue;
+                    if(index == outs[i]) continue;
                     //for simplicity, ensure node will only send 1 package to any given other node
                     for(int j = 0; j < i; j++){
                         if(outs[j] == outs[i]){
@@ -106,8 +108,8 @@ public class Main {
         int port = 1234;
         int masterPort = 4321;
         boolean nodeDebugInfo = true;
-        boolean serverDebugInfo = false;
-        boolean masterDebugInfo = false;
+        boolean serverDebugInfo = true;
+        boolean masterDebugInfo = true;
         /*get number of nodes
         int max = Integer.parseInt(args[0]);
         if(max == 1){
@@ -115,7 +117,7 @@ public class Main {
             return;
         }*/
         //make list
-        int maxSwitch = 2;
+        int maxSwitch = 3;
         int maxNode = 5;
         ArrayList<int[]> list = makeList(maxSwitch, maxNode);
         //make files

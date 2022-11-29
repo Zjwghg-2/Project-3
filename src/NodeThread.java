@@ -114,8 +114,10 @@ public class NodeThread extends Thread{
         while(!initialized) Thread.onSpinWait();
         try{
             if(debugInfo) System.out.println("NodeThread " + ID + ": incoming message identified: " + message);
-            out.write(message.encode());
-            out.flush();
+            synchronized (out){
+                out.write(message.encode());
+                out.flush();
+            }
         } catch (SocketException e) {
             System.out.println("Error: NodeThread " + ID + ": could not send message to client; socket closed.");
             e.printStackTrace();
@@ -176,15 +178,17 @@ public class NodeThread extends Thread{
                             //node is done sending data, so we no longer need to do this loop
                             this.finished = true;
                             //inform switch
-                            if(debugInfo) System.out.println("NodeThread " + ID + ": control message identified");
+                            if(debugInfo) System.out.println("NodeThread " + ID + ": control message identified " + msg);
                             server.checkFinished();
                             //ack
-                            out.write(new Frame(0, 0, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
-                            out.flush();
+                            synchronized (out){
+                                out.write(new Frame(0, 0, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
+                                out.flush();
+                            }
                         }
                         //not control, so it's an actual data message
                         else {
-                            if(debugInfo) System.out.println("NodeThread " + ID + ": outgoing message sent to switch");
+                            if(debugInfo) System.out.println("NodeThread " + ID + ": outgoing message sent to switch " + msg);
                             //add it to the server's buffer to be switched as appropriate
                             this.server.enqueueMessage(msg);
                         }
