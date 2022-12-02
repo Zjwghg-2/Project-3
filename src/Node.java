@@ -193,7 +193,7 @@ public class Node extends Thread {
                         else if(msg.getDest()[0] == netID && msg.getDest()[1] == ID){
                             //check crc data viability
                             if(msg.getCrc() != msg.calcCrc()){
-                                System.out.println("Node " + netID + ":" + ID + ": received garbage frame");
+                                if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received garbage frame");
                                 out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 2).encode());
                                 out.flush();
                             }

@@ -1,10 +1,27 @@
-The code can be run via the make file (instructions pending)
+Ensure both your JDK and JRE versions are up to date. 
+You can check the version of the compiler and enviornment via <javac -version> and <java -version> respectively.
+My local linux distribution runs openJDK 18, and while earlier versions may work, I can only verify it does for certain on 18 or higher.
 
-Use (PLEASE read this):
+Github link: https://github.com/Zjwghg-2/Project-3.git
+
+As requested, a makefile is provided for the code.
+    To compile & run, execute:	make full
+    To only compile, execute:	make
+    To only run, execute: 	make run
+    				  OR, if already compiled,
+    			        java Main [number of nodes] [number of switches]
+    To clean, execute:		make clean
+PLEASE NOTE: 
+    The default number of nodes is 5, and number of switches is 3 . To change this, for example, to 10 nodes, append "NODE=10" to "make full" or "make run" 
+    "make clean" will clear all node input and output files
+    Main.java creates the node output files randomly, as requested.
+
+Usage(PLEASE read this):
     execute via:  java Main [number of nodes] [number of switches]
     Nodes are randomly assigned to switches, with a guarantee of at least 1 per network,
        so please ensure the number of nodes is no smaller than the number of switches
-    The node output files are randomly generated upon running, but the firewall is NOT generated.
+    The node output files are randomly generated upon running, but the firewall file is NOT randomly generated.
+    Nowhere in the document does it say we must generate the firewall file ourselves. Please be aware of this fact.
        when you make the firewall file, keep in mind that there is a guarantee of 1 node per any given switch.
        so, 2_1 is guaranteed to exist, but 2_2 is not.
 
