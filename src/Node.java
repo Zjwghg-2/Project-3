@@ -18,6 +18,7 @@ public class Node extends Thread {
     private final ArrayList<Integer[]> saved;
     BufferedOutputStream out;
     DataInputStream in;
+    Random random;
 
     /**
      * Node constructor
@@ -33,6 +34,7 @@ public class Node extends Thread {
         this.saved = new ArrayList<>();
         this.finished = false;
         this.terminated = false;
+        this.random = new Random();
         this.debugInfo = debugInfo;
         this.outgoing = new LinkedList<>();
         //initialize file
@@ -169,11 +171,9 @@ public class Node extends Thread {
             boolean waitOnAck = false;
             Frame outMsg = null;
 
-            //backoff
-            Random random = new Random();
-
             //Run until socket closes
             while(!server.isClosed()){
+                //------ Receiving block ------
                 //listen for incoming messages
                 //loop here will read whenever there is data to read
                 if(in.available()>0) {
@@ -197,12 +197,18 @@ public class Node extends Thread {
                                 out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 2).encode());
                                 out.flush();
                             }
-                            //data frame handle
+                            //handle incoming data for a viable frame
                             else if(msg.getSize() > 0){
                                 //send ack first
-                                out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
-                                out.flush();
-                                if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received " + msg);
+                                //roll random number from 1 to 100, and if it's 5 or less drop ack. simulates a 5% fail chance.
+                                if(random.nextInt(100)+1 > 5){
+                                    out.write(new Frame(netID, ID, msg.getSource()[0], msg.getSource()[1], msg.getSN(), 3).encode());
+                                    out.flush();
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received " + msg);
+                                } else {
+                                    if(debugInfo) System.out.println("Node " + netID + ":" + ID + ": received " + msg + ", And is dropping ack");
+                                }
+                                //regardless of ack roll, save the data as usual.
                                 //check saved -- this handles duplicate messages
                                 boolean f = false;
                                 boolean g = false;
@@ -266,7 +272,8 @@ public class Node extends Thread {
                         System.out.println("Frame error detected at NodeThread ID: " + this.ID);
                     }
                 }
-                //check for period on a message
+                //------ Sending block ------
+                //check for timeout period on sent message
                 if(waitOnAck){
                     //check for repeat. if timeout, print and move on
                     if(repeat == RETRY+1){
@@ -287,7 +294,10 @@ public class Node extends Thread {
                 //this block will not execute unless ack has been received; only 1 message at a time is to be sent.
                 if(!outgoing.isEmpty() && !waitOnAck){
                     outMsg = outgoing.remove();
-                    out.write(outMsg.encode());
+                    //simulate a 5% chance to send an erroneous frame. if <=5, send a 'corrupted' version of the frame.
+                    //the corrupt version is NOT saved as the outMsg, so that on retry from ack 2 it sends the actual data.
+                    if(random.nextInt(100) + 1 > 5) out.write(outMsg.encode());
+                    else out.write(outMsg.corrupt().encode());
                     //send message
                     out.flush();
                     //start time

@@ -2,6 +2,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Random;
 
 /**
  * Frame object class
@@ -221,6 +222,19 @@ public class Frame {
         }
     }
 
+    /**
+     * Return a new frame with ""corrupted"" data, with the same header info.
+     * Data viability can be checked via the crc field.
+     * @return erroneous frame
+     */
+    public Frame corrupt(){
+        Random r = new Random();
+        String data = r.nextLong() + "(corrupt)";
+        byte crc = this.crc;
+        Frame f = new Frame(this.sourceNet, this.sourceNode, this.destNet, this.destNode, this.sequence, data);
+        f.setCrc(crc);
+        return f;
+    }
 
     //A test example to show how to utilize this class, and to show that it works.
     public static void main(String[] args) throws Exception{

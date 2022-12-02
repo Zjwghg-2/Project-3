@@ -100,25 +100,31 @@ public class Main {
 
 
     public static void main(String[] args){
-        /*if(args.length != 1){
-            System.out.println("Use: java Main [number of nodes]");
+        if(args.length != 2){
+            System.out.println("Use: java Main [number of nodes] [number of switches]");
+            System.out.println("Nodes are randomly assigned to switches, with a guarantee of at least 1 per network," +
+                    " so please ensure the number of nodes is no smaller than the number of switches");
+            System.out.println("The node output files are randomly generated upon running, but the firewall is NOT.");
             return;
-        }*/
+        }
         //Variable controls
         int port = 1234;
         int masterPort = 4321;
-        boolean nodeDebugInfo = true;
-        boolean serverDebugInfo = true;
-        boolean masterDebugInfo = true;
-        /*get number of nodes
-        int max = Integer.parseInt(args[0]);
-        if(max == 1){
+        boolean nodeDebugInfo = false;
+        boolean serverDebugInfo = false;
+        boolean masterDebugInfo = false;
+        //get number of nodes
+        int maxNode = Integer.parseInt(args[0]);
+        if(maxNode <= 1){
             System.out.println("Please use more than 1 node");
             return;
-        }*/
+        }
+        int maxSwitch = Integer.parseInt(args[1]);
+        if(maxSwitch < 1){
+            System.out.println("Please use at least 1 switch");
+            return;
+        }
         //make list
-        int maxSwitch = 3;
-        int maxNode = 5;
         ArrayList<int[]> list = makeList(maxSwitch, maxNode);
         //make files
         for(int i = 0; i < list.size(); i++){
